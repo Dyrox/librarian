@@ -196,6 +196,8 @@ pub enum Message {
     ContextMenu(PathBuf),
     CursorMoved(iced::Point),
     Wheel,
+    /// A right click nothing else handled: close the menu (only the menu).
+    DismissMenu,
     CloseMenu,
     OpenSub(Option<ctx::Sub>),
     /// A menu command: close the menu, then run it.
@@ -751,7 +753,7 @@ impl App {
                 self.cursor = p;
                 Task::none()
             }
-            Message::Wheel => {
+            Message::Wheel | Message::DismissMenu => {
                 if self.menu.take().is_some() {
                     self.tag_draft.clear();
                 }
@@ -862,6 +864,9 @@ impl App {
             (Event::Window(window::Event::CloseRequested), _) => Some(Message::CloseRequested(id)),
             (Event::Mouse(iced::mouse::Event::CursorMoved { position }), _) => Some(Message::CursorMoved(position)),
             (Event::Mouse(iced::mouse::Event::WheelScrolled { .. }), _) => Some(Message::Wheel),
+            (Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Right)), event::Status::Ignored) => {
+                Some(Message::DismissMenu)
+            }
             (
                 Event::Keyboard(keyboard::Event::KeyPressed {
                     key: keyboard::Key::Named(keyboard::key::Named::Escape),

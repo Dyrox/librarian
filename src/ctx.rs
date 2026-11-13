@@ -440,8 +440,10 @@ impl App {
 
         let (lines, anchors) = self.main_lines(pr, m.sub);
         let main_h = Self::lines_height(&lines);
-        let x = m.at.x.min(win.width - MENU_W - 8.0).max(8.0);
-        let y = m.at.y.min(win.height - main_h - 8.0).max(8.0);
+        // Open just off the cursor (like macOS), so right-clicking the same
+        // spot again lands on the project, not the menu, and reopens it.
+        let x = (m.at.x + 2.0).min(win.width - MENU_W - 8.0).max(8.0);
+        let y = (m.at.y + 2.0).min(win.height - main_h - 8.0).max(8.0);
 
         let mut layer = iced::widget::Stack::new()
             .width(Length::Fill)
@@ -462,9 +464,10 @@ impl App {
             ]);
         }
 
-        let backdrop = mouse_area(Space::new().width(Length::Fill).height(Length::Fill))
-            .on_press(Message::CloseMenu)
-            .on_right_press(Message::CloseMenu);
+        // A left click outside closes the menu (and is swallowed, like macOS).
+        // Right clicks pass through: on a project they reopen the menu right
+        // there; anywhere else `DismissMenu` (see `subscription`) closes it.
+        let backdrop = mouse_area(Space::new().width(Length::Fill).height(Length::Fill)).on_press(Message::CloseMenu);
         Some(iced::widget::stack![backdrop, layer].into())
     }
 }
