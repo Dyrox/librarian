@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Librarian: a shelf of projects. The books' heights read as a waveform. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A2C31"/>
+      <stop offset="1" stop-color="#141518"/>
+    </linearGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.18"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+
+  <!-- books, standing on the shelf at y = 724 -->
+  <g transform="translate(18 0)">
+    <rect x="214" y="430" width="74" height="294" rx="14" fill="#FFA529"/>
+    <rect x="300" y="330" width="62" height="394" rx="14" fill="#5CFFE8"/>
+    <rect x="374" y="476" width="82" height="248" rx="14" fill="#D86CE4"/>
+    <rect x="468" y="284" width="66" height="440" rx="14" fill="#F7F47C"/>
+    <rect x="546" y="392" width="76" height="332" rx="14" fill="#FF94A6"/>
+    <!-- the last one leans on its neighbour -->
+    <rect x="705" y="446" width="70" height="278" rx="14" fill="#8BC5FF" transform="rotate(-17 705 724)"/>
+  </g>
+  <!-- spine bands -->
+  <g fill="#000" fill-opacity="0.2" transform="translate(18 0)">
+    <rect x="214" y="476" width="74" height="16"/>
+    <rect x="300" y="376" width="62" height="16"/>
+    <rect x="374" y="522" width="82" height="16"/>
+    <rect x="468" y="330" width="66" height="16"/>
+    <rect x="546" y="438" width="76" height="16"/>
+    <rect x="705" y="492" width="70" height="16" transform="rotate(-17 705 724)"/>
+  </g>
+  <g fill="url(#shade)" transform="translate(18 0)">
+    <rect x="214" y="430" width="74" height="294" rx="14"/>
+    <rect x="300" y="330" width="62" height="394" rx="14"/>
+    <rect x="374" y="476" width="82" height="248" rx="14"/>
+    <rect x="468" y="284" width="66" height="440" rx="14"/>
+    <rect x="546" y="392" width="76" height="332" rx="14"/>
+    <rect x="705" y="446" width="70" height="278" rx="14" transform="rotate(-17 705 724)"/>
+  </g>
+
+  <!-- shelf -->
+  <rect x="190" y="724" width="644" height="26" rx="13" fill="#F2F3F5"/>
+</svg>

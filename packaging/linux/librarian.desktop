@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Librarian
+GenericName=Music Project Browser
+Comment=Browse and preview your Ableton Live and FL Studio projects
+Exec=librarian
+Icon=librarian
+Terminal=false
+Categories=AudioVideo;Audio;Utility;
+Keywords=ableton;fl studio;music;projects;daw;
