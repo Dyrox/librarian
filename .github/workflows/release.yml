@@ -28,7 +28,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - id: v
         run: |
           base=$(sed -n 's/^version = "\([0-9]*\.[0-9]*\)\..*"/\1/p' Cargo.toml | head -n 1)
@@ -41,7 +41,7 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Stamp version
@@ -68,7 +68,7 @@ jobs:
           $inno = "${env:ProgramFiles(x86)}\Inno Setup 6"
           if (-not (Test-Path "$inno\ISCC.exe")) { choco install innosetup -y --no-progress }
           & "$inno\ISCC.exe" "/DAppVersion=$($env:VERSION)" packaging\windows\librarian.iss
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: windows
           path: |
@@ -78,11 +78,11 @@ jobs:
 
   macos:
     needs: version
-    runs-on: macos-14
+    runs-on: macos-latest
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
@@ -91,7 +91,7 @@ jobs:
         run: perl -0pi -e 's/^version = "[^"]*"/version = "$ENV{VERSION}"/m' Cargo.toml
       - name: Build universal app + DMG
         run: UNIVERSAL=1 DMG=1 ./scripts/bundle-macos.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: macos
           path: dist/*.dmg
@@ -104,7 +104,7 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: System libraries
         run: sudo apt-get update && sudo apt-get install -y pkg-config libasound2-dev libxkbcommon-dev libwayland-dev
       - uses: dtolnay/rust-toolchain@stable
@@ -115,7 +115,7 @@ jobs:
         run: cargo build --release
       - name: Package (.deb + .tar.gz)
         run: ./scripts/package-linux.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: linux
           path: |
@@ -128,7 +128,7 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: artifacts
           merge-multiple: true
