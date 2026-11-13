@@ -27,6 +27,9 @@ pub struct MenuState {
     pub project: PathBuf,
     pub at: Point,
     pub sub: Option<Sub>,
+    /// Scrolling since the menu opened. A two-finger click on a trackpad
+    /// also sends a few tiny scroll events; only a real scroll closes it.
+    pub scrolled: f32,
 }
 
 const MENU_W: f32 = 252.0;

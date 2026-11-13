@@ -195,7 +195,8 @@ pub enum Message {
     Ignore(String),
     ContextMenu(PathBuf),
     CursorMoved(iced::Point),
-    Wheel,
+    /// Scroll distance in pixels (lines are counted as 20 px).
+    Wheel(f32),
     /// A right click nothing else handled: close the menu (only the menu).
     DismissMenu,
     CloseMenu,
@@ -531,7 +532,7 @@ impl App {
                         "bounces" => Some(ctx::Sub::Bounces),
                         _ => None,
                     };
-                    self.menu = Some(ctx::MenuState { project: first.dir.clone(), at: iced::Point::new(560.0, 150.0), sub });
+                    self.menu = Some(ctx::MenuState { project: first.dir.clone(), at: iced::Point::new(560.0, 150.0), sub, scrolled: 0.0 });
                 }
                 if let Some(root) = self.prefs.root.clone() {
                     let keys: Vec<String> = projects.iter().map(|p| tags::Tags::key(&root, &p.dir)).collect();
@@ -746,14 +747,28 @@ impl App {
             Message::ContextMenu(dir) => {
                 self.selected = Some(dir.clone());
                 self.tag_draft.clear();
-                self.menu = Some(ctx::MenuState { project: dir, at: self.cursor, sub: None });
+                self.menu = Some(ctx::MenuState { project: dir, at: self.cursor, sub: None, scrolled: 0.0 });
                 Task::none()
             }
             Message::CursorMoved(p) => {
                 self.cursor = p;
                 Task::none()
             }
-            Message::Wheel | Message::DismissMenu => {
+            Message::Wheel(d) => {
+                // Close on a deliberate scroll only: trackpad two-finger
+                // clicks emit small scroll events as the fingers settle.
+                let Some(m) = self.menu.as_mut() else { return Task::none() };
+                m.scrolled += d;
+                if std::env::var_os("LIBRARIAN_DEBUG_MENU").is_some() {
+                    eprintln!("menu: wheel {d:.1}px, total {:.1}px", m.scrolled);
+                }
+                if m.scrolled > 24.0 {
+                    self.menu = None;
+                    self.tag_draft.clear();
+                }
+                Task::none()
+            }
+            Message::DismissMenu => {
                 if self.menu.take().is_some() {
                     self.tag_draft.clear();
                 }
@@ -863,7 +878,10 @@ impl App {
             (Event::Window(window::Event::Resized(size)), _) => Some(Message::Resized(size)),
             (Event::Window(window::Event::CloseRequested), _) => Some(Message::CloseRequested(id)),
             (Event::Mouse(iced::mouse::Event::CursorMoved { position }), _) => Some(Message::CursorMoved(position)),
-            (Event::Mouse(iced::mouse::Event::WheelScrolled { .. }), _) => Some(Message::Wheel),
+            (Event::Mouse(iced::mouse::Event::WheelScrolled { delta }), _) => Some(Message::Wheel(match delta {
+                iced::mouse::ScrollDelta::Lines { x, y } => (x.abs() + y.abs()) * 20.0,
+                iced::mouse::ScrollDelta::Pixels { x, y } => x.abs() + y.abs(),
+            })),
             (Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Right)), event::Status::Ignored) => {
                 Some(Message::DismissMenu)
             }
@@ -941,10 +959,11 @@ impl App {
         ]
         .padding(iced::Padding { top: 8.0, right: 8.0, bottom: 8.0, left: 0.0 })
         .into();
-        match self.context_menu() {
-            Some(menu) => stack![base, menu].into(),
-            None => base,
-        }
+        // Always a stack, menu or not: switching between `base` and
+        // `stack![base, menu]` changes the widget tree, and iced then throws
+        // away the scroll positions inside `base` (lists jump to the top).
+        let menu: Element<_> = self.context_menu().unwrap_or_else(|| Space::new().into());
+        stack![base, menu].into()
     }
 
     fn welcome(&self) -> Element<'_, Message> {
