@@ -1,5 +1,6 @@
 //! Clickable waveform overview drawn on a canvas.
 
+use std::cell::Cell;
 use std::path::PathBuf;
 
 use iced::mouse;
@@ -23,6 +24,22 @@ pub struct Waveform<'a> {
 #[derive(Default)]
 pub struct State {
     hover: Option<f32>,
+    /// The drawn bars, reused until something visible changes: redrawing
+    /// every waveform on every frame made scrolling stutter.
+    cache: canvas::Cache,
+    drawn: Cell<Option<Key>>,
+}
+
+/// Everything the picture depends on. Progress and hover are rounded to
+/// whole pixels so playback only redraws when a bar actually changes.
+#[derive(Clone, Copy, PartialEq)]
+struct Key {
+    peaks: usize,
+    len: usize,
+    progress: i32,
+    hover: i32,
+    size: (u32, u32),
+    dark: bool,
 }
 
 impl canvas::Program<Message> for Waveform<'_> {
@@ -69,9 +86,32 @@ impl canvas::Program<Message> for Waveform<'_> {
         bounds: Rectangle,
         _cursor: mouse::Cursor,
     ) -> Vec<Geometry> {
-        let mut frame = Frame::new(renderer, bounds.size());
         let w = bounds.width;
-        let h = bounds.height;
+        let px = |f: Option<f32>| f.map_or(-1, |f| (f * w).round() as i32);
+        let key = Key {
+            peaks: self.peaks.map_or(0, |p| p.values.as_ptr() as usize),
+            len: self.peaks.map_or(0, |p| p.values.len()),
+            progress: px(self.progress),
+            hover: px(state.hover),
+            size: (bounds.width.to_bits(), bounds.height.to_bits()),
+            dark: style::is_dark(),
+        };
+        if state.drawn.get() != Some(key) {
+            state.cache.clear();
+            state.drawn.set(Some(key));
+        }
+        vec![state.cache.draw(renderer, bounds.size(), |frame| self.paint(frame, state.hover))]
+    }
+
+    fn mouse_interaction(&self, _: &State, bounds: Rectangle, cursor: mouse::Cursor) -> mouse::Interaction {
+        if cursor.is_over(bounds) { mouse::Interaction::Pointer } else { mouse::Interaction::default() }
+    }
+}
+
+impl Waveform<'_> {
+    fn paint(&self, frame: &mut Frame, hover: Option<f32>) {
+        let w = frame.width();
+        let h = frame.height();
         let step = self.bar + self.gap;
         let n = ((w + self.gap) / step).floor().max(1.0) as usize;
         let progress = self.progress.unwrap_or(0.0);
@@ -94,7 +134,7 @@ impl canvas::Program<Message> for Waveform<'_> {
             let y = (h - bh) / 2.0;
             let color = if playing && center <= progress {
                 style::p().text
-            } else if state.hover.is_some_and(|hv| center <= hv) {
+            } else if hover.is_some_and(|hv| center <= hv) {
                 style::p().wave_hover
             } else {
                 style::p().wave_idle
@@ -107,14 +147,10 @@ impl canvas::Program<Message> for Waveform<'_> {
             frame.fill(&rect, color);
         }
 
-        if let Some(hv) = state.hover {
+        if let Some(hv) = hover {
             let x = (hv * w).round();
             frame.fill_rectangle(Point::new(x, 0.0), Size::new(1.0, h), Color { a: 0.5, ..style::p().text });
         }
-        vec![frame.into_geometry()]
     }
 
-    fn mouse_interaction(&self, _: &State, bounds: Rectangle, cursor: mouse::Cursor) -> mouse::Interaction {
-        if cursor.is_over(bounds) { mouse::Interaction::Pointer } else { mouse::Interaction::default() }
-    }
 }

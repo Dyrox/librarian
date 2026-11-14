@@ -58,4 +58,4 @@ While a bounce plays, ← / → skip back / forward 5 seconds; ⇧ ← / ⇧ →
 Preferences, tags and listening history live in `~/Library/Application Support/Librarian`, caches in
 `~/Library/Caches/Librarian`.
 
-Debug aids: `LIBRARIAN_ROOT=DIR` scans another folder for one session; `LIBRARIAN_FILTER=issues|settings` opens on that page.
+Debug aids: `LIBRARIAN_ROOT=DIR` scans another folder for one session; `LIBRARIAN_FILTER=issues|settings` opens on that page; `LIBRARIAN_SCROLL=PX` scrolls the grid there after 3 s.

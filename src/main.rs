@@ -194,7 +194,8 @@ pub enum Message {
     Focused,
     Ignore(String),
     ContextMenu(PathBuf),
-    CursorMoved(iced::Point),
+    /// The grid scrolled: (offset from the top, visible height).
+    GridScrolled(f32, f32),
     /// Scroll distance in pixels (lines are counted as 20 px).
     Wheel(f32),
     /// A right click nothing else handled: close the menu (only the menu).
@@ -256,8 +257,11 @@ struct App {
     tags: tags::Tags,
     tag_draft: String,
     menu: Option<ctx::MenuState>,
-    cursor: iced::Point,
     window_size: Size,
+    /// Where the grid is scrolled to and how tall it is, so only the rows on
+    /// screen are built (see `grid`).
+    grid_offset: f32,
+    grid_height: f32,
 }
 
 /// Runs blocking work on the rayon pool and resolves when it's done.
@@ -319,15 +323,23 @@ impl App {
             tags,
             tag_draft: String::new(),
             menu: None,
-            cursor: iced::Point::ORIGIN,
             window_size: Size::ZERO,
+            grid_offset: 0.0,
+            grid_height: 1200.0,
         };
         app.apply_theme();
         let scan = app.rescan();
         let icon = Task::batch(Daw::ALL.map(|d| app.resolve_app(d)));
         let settings = if app.settings_open { app.update_settings(settings::Set::Open) } else { Task::none() };
         let theme = system::theme().map(Message::ThemeChanged);
-        (app, Task::batch([theme, scan, icon, settings]))
+        // Debug aid: LIBRARIAN_SCROLL=<px> scrolls the grid there after 3 s.
+        let scroll = match std::env::var("LIBRARIAN_SCROLL").ok().and_then(|v| v.parse::<f32>().ok()) {
+            Some(y) => Task::perform(blocking(|| std::thread::sleep(Duration::from_secs(3))), |_| ()).then(move |()| {
+                iced::widget::operation::scroll_to(GRID_ID, scrollable::AbsoluteOffset { x: None, y: Some(y) })
+            }),
+            None => Task::none(),
+        };
+        (app, Task::batch([theme, scan, icon, settings, scroll]))
     }
 
     fn root(&self) -> Option<&Path> {
@@ -747,11 +759,12 @@ impl App {
             Message::ContextMenu(dir) => {
                 self.selected = Some(dir.clone());
                 self.tag_draft.clear();
-                self.menu = Some(ctx::MenuState { project: dir, at: self.cursor, sub: None, scrolled: 0.0 });
+                self.menu = Some(ctx::MenuState { project: dir, at: cursor(), sub: None, scrolled: 0.0 });
                 Task::none()
             }
-            Message::CursorMoved(p) => {
-                self.cursor = p;
+            Message::GridScrolled(offset, height) => {
+                self.grid_offset = offset;
+                self.grid_height = height;
                 Task::none()
             }
             Message::Wheel(d) => {
@@ -877,11 +890,12 @@ impl App {
             (Event::Window(window::Event::Focused), _) => Some(Message::Focused),
             (Event::Window(window::Event::Resized(size)), _) => Some(Message::Resized(size)),
             (Event::Window(window::Event::CloseRequested), _) => Some(Message::CloseRequested(id)),
-            (Event::Mouse(iced::mouse::Event::CursorMoved { position }), _) => Some(Message::CursorMoved(position)),
-            (Event::Mouse(iced::mouse::Event::WheelScrolled { delta }), _) => Some(Message::Wheel(match delta {
-                iced::mouse::ScrollDelta::Lines { x, y } => (x.abs() + y.abs()) * 20.0,
-                iced::mouse::ScrollDelta::Pixels { x, y } => x.abs() + y.abs(),
-            })),
+            // Remembered for placing the context menu, without a message:
+            // every message rebuilds and lays out the whole window.
+            (Event::Mouse(iced::mouse::Event::CursorMoved { position }), _) => {
+                set_cursor(position);
+                None
+            }
             (Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Right)), event::Status::Ignored) => {
                 Some(Message::DismissMenu)
             }
@@ -931,7 +945,20 @@ impl App {
             Some(root) => Subscription::run_with(root, watch::changes).map(|()| Message::FsChanged),
             None => Subscription::none(),
         };
-        let events = Subscription::batch([events, watcher]);
+        // Scrolling only matters while the menu is open (it closes it); a
+        // message per scroll tick would rebuild the window every frame.
+        let wheel = if self.menu.is_some() {
+            event::listen_with(|event, _, _| match event {
+                Event::Mouse(iced::mouse::Event::WheelScrolled { delta }) => Some(Message::Wheel(match delta {
+                    iced::mouse::ScrollDelta::Lines { x, y } => (x.abs() + y.abs()) * 20.0,
+                    iced::mouse::ScrollDelta::Pixels { x, y } => x.abs() + y.abs(),
+                })),
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
+        let events = Subscription::batch([events, watcher, wheel]);
         if self.audio.is_playing() {
             Subscription::batch([
                 events,
@@ -1522,26 +1549,45 @@ impl App {
             const PAD: f32 = 28.0;
             const GAP: f32 = 14.0;
             const MIN_TILE: f32 = 232.0;
+            const TOP: f32 = 2.0;
             let avail = (size.width - 2.0 * PAD - 12.0).max(MIN_TILE);
             let cols = (((avail + GAP) / (MIN_TILE + GAP)).floor() as usize).max(1);
             let tile_w = (avail - GAP * (cols - 1) as f32) / cols as f32;
 
-            let rows = list.chunks(cols).map(|chunk| {
-                let mut r = Row::with_children(chunk.iter().map(|pr| self.tile(pr, tile_w))).spacing(GAP);
+            // Only the rows on screen (plus one either side) are built; the
+            // rest is empty space of the same height. With hundreds of
+            // projects, building and laying out every tile on each message
+            // (playback ticks, hovering, scrolling) is what made it stutter.
+            let row_h = tile_height(tile_w);
+            let pitch = row_h + GAP;
+            let n_rows = list.len().div_ceil(cols);
+            let on_screen = (self.grid_height / pitch).ceil() as usize + 1;
+            let first = (((self.grid_offset - TOP) / pitch).floor().max(0.0) as usize)
+                .saturating_sub(1)
+                .min(n_rows.saturating_sub(on_screen + 1));
+            let last = (first + on_screen + 2).min(n_rows);
+
+            let mut col = Column::new().spacing(GAP);
+            if first > 0 {
+                col = col.push(Space::new().height(first as f32 * pitch - GAP));
+            }
+            for chunk in list.chunks(cols).skip(first).take(last - first) {
+                let mut r = Row::with_children(chunk.iter().map(|pr| self.tile(pr, tile_w))).spacing(GAP).height(row_h);
                 for _ in chunk.len()..cols {
                     r = r.push(Space::new().width(Length::Fill));
                 }
-                r.into()
-            });
-            scrollable(
-                Column::with_children(rows)
-                    .spacing(GAP)
-                    .padding(iced::Padding { top: 2.0, right: PAD, bottom: 24.0, left: PAD }),
-            )
-            .height(Length::Fill)
-            .direction(Direction::Vertical(Scrollbar::new().width(6).scroller_width(6).margin(3)))
-            .style(scroll)
-            .into()
+                col = col.push(r);
+            }
+            if last < n_rows {
+                col = col.push(Space::new().height((n_rows - last) as f32 * pitch - GAP));
+            }
+            scrollable(col.padding(iced::Padding { top: TOP, right: PAD, bottom: 24.0, left: PAD }))
+                .height(Length::Fill)
+                .direction(Direction::Vertical(Scrollbar::new().width(6).scroller_width(6).margin(3)))
+                .style(scroll)
+                .id(GRID_ID)
+                .on_scroll(|v| Message::GridScrolled(v.absolute_offset().y, v.bounds().height))
+                .into()
         })
         .into()
     }
@@ -1553,7 +1599,7 @@ impl App {
         let is_current = self.now.as_ref().is_some_and(|n| n.project == pr.dir);
         let playing = is_current && !self.audio.is_paused();
         let demo = self.current_demo(pr);
-        let thumb_h = (width * 0.56).clamp(120.0, 210.0);
+        let thumb_h = thumb_height(width);
 
         let mut overlay = row![].align_y(Alignment::End);
         if demo.is_some() {
@@ -1618,10 +1664,12 @@ impl App {
         if pr.versions.len() > 1 {
             info = info.push(self.version_stepper(pr, width));
         }
-        let body = column![top, info.padding([8, 6])]
-        .spacing(4);
+        // Fixed height so every row is the same height (see `grid`).
+        let body = column![top, info.padding([8, 6]).height(INFO_H)].spacing(4);
 
-        let mut area = mouse_area(container(body).padding(6).width(Length::Fill).style(tile(selected, hovered)))
+        let mut area = mouse_area(
+            container(body).padding(6).width(Length::Fill).height(Length::Fill).style(tile(selected, hovered)),
+        )
             .on_press(Message::Select(pr.dir.clone()))
             .on_right_press(Message::ContextMenu(pr.dir.clone()))
             .on_enter(Message::Hover(Some(pr.dir.clone())))
@@ -1630,7 +1678,7 @@ impl App {
         if let Some(s) = pr.main_set() {
             area = area.on_double_click(Message::Open(s.path.clone()));
         }
-        container(area).width(Length::Fill).into()
+        container(area).width(Length::Fill).height(Length::Fill).into()
     }
 
     fn daw_nav(&self, daw: Daw) -> Element<'_, Message> {
@@ -2033,3 +2081,27 @@ fn reveal_path(p: &Path) {
     let _ = Command::new("xdg-open").arg(p.parent().unwrap_or(p)).spawn();
 }
 
+/// Height of the info block under a grid thumbnail: name, date, waveform and
+/// the bounce stepper (reserved even when a project has a single bounce).
+const INFO_H: f32 = 106.0;
+
+fn thumb_height(tile_w: f32) -> f32 {
+    (tile_w * 0.56).clamp(120.0, 210.0)
+}
+
+/// Height of a grid tile: padding, thumbnail, gap, info.
+fn tile_height(tile_w: f32) -> f32 {
+    6.0 + thumb_height(tile_w) + 4.0 + INFO_H + 6.0
+}
+
+static CURSOR: std::sync::Mutex<iced::Point> = std::sync::Mutex::new(iced::Point::ORIGIN);
+
+fn set_cursor(p: iced::Point) {
+    *CURSOR.lock().unwrap() = p;
+}
+
+fn cursor() -> iced::Point {
+    *CURSOR.lock().unwrap()
+}
+
+const GRID_ID: &str = "grid";
