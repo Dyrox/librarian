@@ -141,7 +141,7 @@ impl Default for Prefs {
     fn default() -> Self {
         Self {
             root: None,
-            grid: false,
+            grid: true,
             sort_by_name: false,
             window: None,
             ignored: Vec::new(),

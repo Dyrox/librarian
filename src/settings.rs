@@ -76,7 +76,16 @@ pub enum Set {
     ClearCache,
     RevealSettings,
     RevealRoot,
+    OpenUrl(&'static str),
 }
+
+const AUTHOR_URL: &str = "https://github.com/Dyrox";
+const REPO_URL: &str = "https://github.com/Dyrox/librarian";
+
+/// Made once: a fresh `Handle` every frame gets a new id, so iced re-uploads
+/// the image on each redraw and it flickers.
+static AVATAR: std::sync::LazyLock<image::Handle> =
+    std::sync::LazyLock::new(|| image::Handle::from_bytes(&include_bytes!("../assets/avatar.png")[..]));
 
 fn msg(s: Set) -> Message {
     Message::Set(s)
@@ -205,6 +214,10 @@ impl App {
                 if let Some(dir) = cache::settings_dir() {
                     reveal_path(&dir.join("prefs.txt"));
                 }
+                Task::none()
+            }
+            Set::OpenUrl(url) => {
+                apps::open_with(None, Path::new(url));
                 Task::none()
             }
             Set::RevealRoot => {
@@ -434,12 +447,33 @@ impl App {
             ],
         );
 
-        let about = row![
-            icon(icons::LOGO, 16, p.text_3),
-            text(t("A project browser for Ableton Live and FL Studio.")).size(12).color(p.text_3),
-        ]
-        .spacing(8)
-        .align_y(Alignment::Center);
+        let version = if i18n::zh() {
+            format!("版本 {}", env!("CARGO_PKG_VERSION"))
+        } else {
+            format!("Version {}", env!("CARGO_PKG_VERSION"))
+        };
+        let avatar = image(AVATAR.clone())
+            .width(40)
+            .height(40)
+            .border_radius(20);
+        let about = section(
+            t("About"),
+            None,
+            vec![
+                item(
+                    Some(container(icon(icons::LOGO, 22, p.text)).width(40).center_x(40).into()),
+                    "Librarian",
+                    Some(format!("{version}  ·  {}", t("A project browser for Ableton Live and FL Studio."))),
+                    small_button(t("Source code"), msg(Set::OpenUrl(REPO_URL))),
+                ),
+                item(
+                    Some(avatar.into()),
+                    t("Made by Dyrox"),
+                    Some("github.com/Dyrox".into()),
+                    small_button("GitHub", msg(Set::OpenUrl(AUTHOR_URL))),
+                ),
+            ],
+        );
 
         let body = column![general, daws, playback, library, storage, keys, about].spacing(24).max_width(760);
         column![
