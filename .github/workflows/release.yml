@@ -128,10 +128,33 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # history and tags, for the changelog
       - uses: actions/download-artifact@v5
         with:
           path: artifacts
           merge-multiple: true
+      # Changelog: every commit since the previous release, then the download table.
+      - name: Release notes
+        run: |
+          python3 scripts/release-notes.py "$VERSION" > notes.md
+          cat >> notes.md <<'NOTES'
+          ## Downloads
+
+          | Platform | Download |
+          | --- | --- |
+          | Windows (installer) | `Librarian-__VERSION__-windows-x64-setup.exe` |
+          | Windows (portable) | `Librarian-__VERSION__-windows-x64-portable.zip` — unzip and run `Librarian.exe`; settings stay in the `LibrarianData` folder next to it |
+          | macOS (Apple Silicon + Intel) | `Librarian-__VERSION__-macos-universal.dmg` |
+          | Linux (Debian / Ubuntu) | `librarian___VERSION___amd64.deb` |
+          | Linux (any distro) | `Librarian-__VERSION__-linux-x86_64.tar.gz` |
+
+          The builds aren't signed by Apple or Microsoft yet. On macOS, the first time: right-click Librarian → Open (or System Settings → Privacy & Security → Open Anyway). On Windows, SmartScreen may ask: More info → Run anyway.
+          NOTES
+          sed -i "s/__VERSION__/$VERSION/g" notes.md
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.version.outputs.version }}
@@ -139,13 +162,4 @@ jobs:
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
           files: artifacts/*
-          body: |
-            | Platform | Download |
-            | --- | --- |
-            | Windows (installer) | `Librarian-${{ needs.version.outputs.version }}-windows-x64-setup.exe` |
-            | Windows (portable) | `Librarian-${{ needs.version.outputs.version }}-windows-x64-portable.zip` — unzip and run `Librarian.exe`; settings stay in the `LibrarianData` folder next to it |
-            | macOS (Apple Silicon + Intel) | `Librarian-${{ needs.version.outputs.version }}-macos-universal.dmg` |
-            | Linux (Debian / Ubuntu) | `librarian_${{ needs.version.outputs.version }}_amd64.deb` |
-            | Linux (any distro) | `Librarian-${{ needs.version.outputs.version }}-linux-x86_64.tar.gz` |
-
-            The builds aren't signed by Apple or Microsoft yet. On macOS, the first time: right-click Librarian → Open (or System Settings → Privacy & Security → Open Anyway). On Windows, SmartScreen may ask: More info → Run anyway.
+          body_path: notes.md
