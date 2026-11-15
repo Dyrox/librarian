@@ -131,7 +131,7 @@ pub const BOLD: Font = Font { weight: font::Weight::Bold, ..Font::DEFAULT };
 pub const SEMIBOLD: Font = Font { weight: font::Weight::Semibold, ..Font::DEFAULT };
 pub const MEDIUM: Font = Font { weight: font::Weight::Medium, ..Font::DEFAULT };
 
-fn border(color: Color, width: f32, radius: f32) -> Border {
+pub fn border(color: Color, width: f32, radius: f32) -> Border {
     Border { color, width, radius: Radius::from(radius) }
 }
 

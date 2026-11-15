@@ -132,6 +132,8 @@ pub enum Filter {
     Unheard,
     Daw(Daw),
     Tag(String),
+    /// Projects with no tag at all.
+    Untagged,
     Issues,
     Group(String),
 }
@@ -1156,6 +1158,7 @@ impl App {
                 Filter::Unheard => self.new_count(p) > 0 || self.now.as_ref().is_some_and(|n| n.project == p.dir),
                 Filter::Daw(d) => p.daw == *d,
                 Filter::Tag(t) => self.tags.has(&self.tag_key(p), t),
+                Filter::Untagged => self.tags.of(&self.tag_key(p)).is_empty(),
                 Filter::Issues => false,
                 Filter::Group(g) => &p.group == g,
             })
@@ -1182,6 +1185,7 @@ impl App {
             Filter::Unheard => t("New Bounces").to_string(),
             Filter::Daw(d) => d.name().to_string(),
             Filter::Tag(name) => tags::label(name),
+            Filter::Untagged => t("Untagged").to_string(),
             Filter::Issues => t("Issues").to_string(),
             Filter::Group(g) if g.is_empty() => self.root().map(file_name).unwrap_or_default(),
             Filter::Group(g) => g.clone(),
@@ -2076,7 +2080,16 @@ fn reveal_path(p: &Path) {
     #[cfg(target_os = "macos")]
     let _ = Command::new("open").arg("-R").arg(p).spawn();
     #[cfg(target_os = "windows")]
-    let _ = Command::new("explorer").arg(format!("/select,{}", p.display())).spawn();
+    {
+        // Explorer parses its own command line: `/select,"C:\a b\c"` works,
+        // but Rust's quoting of the whole argument (`"/select,C:\a b\c"`)
+        // isn't understood and Explorer falls back to opening Documents.
+        // It also rejects `\\?\` verbatim paths and forward slashes.
+        use std::os::windows::process::CommandExt;
+        let s = p.to_string_lossy().replace('/', "\\");
+        let s = s.strip_prefix(r"\\?\UNC\").map(|r| format!(r"\\{r}")).unwrap_or_else(|| s.strip_prefix(r"\\?\").unwrap_or(&s).to_string());
+        let _ = Command::new("explorer").raw_arg(format!("/select,\"{s}\"")).spawn();
+    }
     #[cfg(all(unix, not(target_os = "macos")))]
     let _ = Command::new("xdg-open").arg(p.parent().unwrap_or(p)).spawn();
 }

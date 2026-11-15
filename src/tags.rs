@@ -26,16 +26,18 @@ pub fn label(name: &str) -> String {
     }
 }
 
-pub const BUILTIN: [(&str, u32); 5] = [
+/// In the order they're listed: furthest along first.
+pub const BUILTIN: [(&str, u32); 6] = [
+    ("Released", 0x8B5CF6),
     ("Finished", 0x22A06B),
     ("In Progress", 0x3B82F6),
-    ("Released", 0x8B5CF6),
     ("Idea", 0xE0A800),
     ("Abandoned", 0x8A8F98),
+    ("Other", 0x14B8A6),
 ];
 
 /// Colours handed out to new custom tags, in order.
-const CUSTOM: [u32; 8] = [0xEC4899, 0x14B8A6, 0xF97316, 0x6366F1, 0x84CC16, 0xEF4444, 0x06B6D4, 0xA855F7];
+const CUSTOM: [u32; 7] = [0xEC4899, 0xF97316, 0x6366F1, 0x84CC16, 0xEF4444, 0x06B6D4, 0xA855F7];
 
 #[derive(Debug, Clone, Default)]
 pub struct Tags {

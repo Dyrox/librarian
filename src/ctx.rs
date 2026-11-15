@@ -184,6 +184,32 @@ impl App {
                 .on_press(Message::SetFilter(Filter::Tag(d.name.clone()))),
             );
         }
+        // Everything that hasn't been sorted yet.
+        let count = self.projects.iter().filter(|pr| self.tags.of(&self.tag_key(pr)).is_empty()).count();
+        let active = !self.settings_open && self.filter == Filter::Untagged;
+        let ring = container(Space::new().width(9).height(9)).style(|_: &iced::Theme| container::Style {
+            border: style::border(style::p().text_3, 1.5, 999.0),
+            ..Default::default()
+        });
+        col = col.push(
+            button(
+                row![
+                    container(ring).width(16).center_x(16),
+                    text(t("Untagged"))
+                        .size(14)
+                        .font(if active { MEDIUM } else { iced::Font::DEFAULT })
+                        .wrapping(Wrapping::None)
+                        .width(Length::Fill),
+                    text(count.to_string()).size(12).color(p.text_3),
+                ]
+                .spacing(10)
+                .align_y(Alignment::Center),
+            )
+            .width(Length::Fill)
+            .padding([7, 10])
+            .style(nav(active))
+            .on_press(Message::SetFilter(Filter::Untagged)),
+        );
         col.into()
     }
 

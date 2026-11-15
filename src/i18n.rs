@@ -156,6 +156,8 @@ pub fn t(s: &'static str) -> &'static str {
         "Released" => "已发布",
         "Idea" => "灵感",
         "Abandoned" => "已弃坑",
+        "Other" => "其他",
+        "Untagged" => "未分类",
 
         // Settings
         "General" => "通用",
