@@ -186,10 +186,6 @@ pub fn t(s: &'static str) -> &'static str {
         "New bounces and saved projects show up on their own." => "新导出和保存过的工程会自动出现。",
         "Mark unheard bounces as NEW" => "标记没听过的导出",
         "Shows a NEW chip until you play the bounce." => "在播放之前显示“新”标记。",
-        "Keep tags in the projects folder" => "把标签保存在工程文件夹里",
-        "Saved as .librarian-tags.txt, so tags travel with the folder (iCloud, Dropbox, an external drive)." => {
-            "保存为 .librarian-tags.txt，标签会跟着文件夹走（iCloud、Dropbox、移动硬盘）。"
-        }
         "Ignored issues" => "已忽略的问题",
         "None" => "无",
         "Storage" => "存储",

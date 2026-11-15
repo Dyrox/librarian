@@ -13,7 +13,7 @@ use crate::apps::{self, Daw};
 use crate::i18n::{self, Lang, t};
 use crate::icons::{self, icon};
 use crate::style::{self, *};
-use crate::{App, Filter, Message, audio, blocking, cache, fmt_size, reveal_path, scan, tags};
+use crate::{App, Filter, Message, audio, blocking, cache, fmt_size, reveal_path, scan};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThemePref {
@@ -71,7 +71,6 @@ pub enum Set {
     PreferMp3(bool),
     Watch(bool),
     NewMarks(bool),
-    TagsInFolder(bool),
     CacheSize(u64),
     ClearCache,
     RevealSettings,
@@ -185,15 +184,6 @@ impl App {
                 if !on && self.filter == Filter::Unheard {
                     self.filter = Filter::All;
                 }
-                Task::none()
-            }
-            Set::TagsInFolder(on) => {
-                self.prefs.tags_in_folder = on;
-                self.save_prefs();
-                // Into the folder: merge with tags another computer may have
-                // left there. Back out: this computer keeps the current set.
-                let to = tags::location(self.root(), on);
-                self.tags.relocate(to, on);
                 Task::none()
             }
             Set::CacheSize(n) => {
@@ -379,15 +369,6 @@ impl App {
                     t("Mark unheard bounces as NEW"),
                     Some(t("Shows a NEW chip until you play the bounce.").into()),
                     switch_ctl(self.prefs.new_marks, Set::NewMarks),
-                ),
-                item(
-                    None,
-                    t("Keep tags in the projects folder"),
-                    Some(
-                        t("Saved as .librarian-tags.txt, so tags travel with the folder (iCloud, Dropbox, an external drive).")
-                            .into(),
-                    ),
-                    switch_ctl(self.prefs.tags_in_folder, Set::TagsInFolder),
                 ),
                 item(None, t("Ignored issues"), None, ignored_ctl),
             ],

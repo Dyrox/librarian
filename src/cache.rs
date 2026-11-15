@@ -133,8 +133,6 @@ pub struct Prefs {
     pub prefer_mp3: bool,
     pub watch: bool,
     pub new_marks: bool,
-    /// Keep tags in `<root>/.librarian-tags.txt` instead of the config folder.
-    pub tags_in_folder: bool,
 }
 
 impl Default for Prefs {
@@ -153,7 +151,6 @@ impl Default for Prefs {
             prefer_mp3: false,
             watch: true,
             new_marks: true,
-            tags_in_folder: false,
         }
     }
 }
@@ -232,7 +229,6 @@ pub fn load_prefs() -> Prefs {
                 "prefer" => prefs.prefer_mp3 = v == "mp3",
                 "watch" => prefs.watch = v != "0",
                 "new_marks" => prefs.new_marks = v != "0",
-                "tags_in_folder" => prefs.tags_in_folder = v == "1",
                 "window" => {
                     prefs.window = v.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))
                 }
@@ -271,7 +267,6 @@ pub fn save_prefs(prefs: &Prefs) {
     out += &format!("prefer={}\n", if prefs.prefer_mp3 { "mp3" } else { "wav" });
     out += &format!("watch={}\n", prefs.watch as u8);
     out += &format!("new_marks={}\n", prefs.new_marks as u8);
-    out += &format!("tags_in_folder={}\n", prefs.tags_in_folder as u8);
     for key in &prefs.ignored {
         out += &format!("ignore={key}\n");
     }

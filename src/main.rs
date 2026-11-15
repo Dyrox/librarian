@@ -286,7 +286,7 @@ impl App {
         }
         i18n::set(prefs.lang);
         let system_dark = platform::system_dark().unwrap_or(false);
-        let tags = tags::Tags::load(tags::location(prefs.root.as_deref(), prefs.tags_in_folder));
+        let tags = tags::Tags::load(tags::location());
         let mut audio = Audio::new();
         audio.preferred = prefs.device.clone();
         let mut app = Self {
@@ -497,9 +497,6 @@ impl App {
             Message::FolderPicked(Some(path)) => {
                 self.prefs.root = Some(path);
                 self.save_prefs();
-                if self.prefs.tags_in_folder {
-                    self.tags = tags::Tags::load(tags::location(self.root(), true));
-                }
                 self.projects.clear();
                 self.filter = Filter::All;
                 self.expanded = None;
@@ -534,10 +531,6 @@ impl App {
                 let ScanResult { mut projects, issues, denied } = result;
                 self.root_denied = denied;
                 scan::order_formats(&mut projects, self.prefs.prefer_mp3);
-                // Tags kept in a synced folder may have been edited elsewhere.
-                if self.prefs.tags_in_folder && self.tags.changed_on_disk() {
-                    self.tags = tags::Tags::load(tags::location(self.root(), true));
-                }
                 self.issues = issues;
                 // Debug aid: LIBRARIAN_DEBUG_MENU=bounces|tags opens the context menu on the first project.
                 if let (Ok(which), None, Some(first)) = (std::env::var("LIBRARIAN_DEBUG_MENU"), &self.menu, projects.first()) {
@@ -549,10 +542,11 @@ impl App {
                     self.menu = Some(ctx::MenuState { project: first.dir.clone(), at: iced::Point::new(560.0, 150.0), sub, scrolled: 0.0 });
                 }
                 if let Some(root) = self.prefs.root.clone() {
-                    let keys: Vec<String> = projects.iter().map(|p| tags::Tags::key(&root, &p.dir)).collect();
-                    if self.tags.follow_moves(&keys) {
-                        self.tags.save();
-                    }
+                    let found: Vec<_> = projects
+                        .iter()
+                        .map(|p| (tags::Tags::key(&root, &p.dir), p.dir.clone(), p.tags.clone()))
+                        .collect();
+                    self.tags.sync(&root, &found);
                     self.heard.sync(&root, &projects);
                 }
                 let old: HashMap<_, _> = self
@@ -817,8 +811,7 @@ impl App {
             Message::ToggleTag(dir, tag) => {
                 if let Some(pr) = self.project(&dir) {
                     let key = self.tag_key(pr);
-                    self.tags.toggle(&key, &tag);
-                    self.tags.save();
+                    self.tags.toggle(&key, &dir, &tag);
                 }
                 Task::none()
             }
@@ -831,7 +824,7 @@ impl App {
                     if let Some(pr) = self.project(&dir) {
                         let key = self.tag_key(pr);
                         if !self.tags.has(&key, &name) {
-                            self.tags.toggle(&key, &name);
+                            self.tags.toggle(&key, &dir, &name);
                         }
                     }
                     self.tags.save();
@@ -840,7 +833,8 @@ impl App {
                 Task::none()
             }
             Message::DeleteTag(name) => {
-                self.tags.delete(&name);
+                let projects: Vec<_> = self.projects.iter().map(|p| (self.tag_key(p), p.dir.clone())).collect();
+                self.tags.delete(&name, &projects);
                 self.tags.save();
                 if self.filter == Filter::Tag(name) {
                     self.filter = Filter::All;

@@ -76,7 +76,7 @@ fn is_relevant(root: &Path, event: &notify::Event) -> bool {
         let ignored = rel.components().any(|c| match c {
             Component::Normal(name) => {
                 let name = name.to_string_lossy();
-                name.starts_with('.') || IGNORED_DIRS.contains(&name.as_ref())
+                name.starts_with('.') || IGNORED_DIRS.contains(&name.as_ref()) || crate::scan::is_legacy(&name)
             }
             _ => false,
         });

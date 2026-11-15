@@ -8,6 +8,8 @@
 //!       `Backup/`               ← ignored (contains older .als copies)
 //!       `Samples/`              ← ignored (contains recorded/consolidated audio)
 //!       `Ableton Project Info/` ← marks the folder as a Live project
+//!
+//! Anything inside a folder named `legacy` is skipped (old projects kept aside).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -73,6 +75,8 @@ pub struct Project {
     pub modified: SystemTime,
     pub meta: Option<AlsMeta>,
     pub arrangement: Option<Arc<Arrangement>>,
+    /// Tags saved in the project (see `tags`).
+    pub tags: Vec<String>,
 }
 
 impl Project {
@@ -200,6 +204,12 @@ const SKIP_DIRS: &[&str] = &["Samples", "Backup", "Ableton Project Info", "node_
 /// Other apps' document packages: their media is theirs, not loose.
 const PACKAGE_EXTS: &[&str] = &[".app", ".logicx", ".band", ".logic"];
 
+/// A `legacy/` folder (any case, at any depth) holds old projects the user
+/// has retired: neither listed nor checked for issues.
+pub fn is_legacy(name: &str) -> bool {
+    name.eq_ignore_ascii_case("legacy")
+}
+
 fn is_package(name: &str) -> bool {
     let lower = name.to_lowercase();
     PACKAGE_EXTS.iter().any(|e| lower.ends_with(e))
@@ -218,6 +228,9 @@ pub fn scan(root: &Path) -> ScanResult {
         return out;
     }
     walk(root, root, 0, &mut out);
+    for p in &mut out.projects {
+        p.tags = crate::tags::read(&p.dir);
+    }
     out.projects.sort_by(|a, b| b.modified.cmp(&a.modified));
     guess_owners(&mut out);
     out
@@ -282,7 +295,7 @@ fn walk(root: &Path, dir: &Path, depth: usize, out: &mut ScanResult) {
     let Some(listing) = list(dir) else { return };
 
     for (name, path) in &listing.dirs {
-        if SKIP_DIRS.contains(&name.as_str()) || is_package(name) {
+        if SKIP_DIRS.contains(&name.as_str()) || is_package(name) || is_legacy(name) {
             continue;
         }
         if !read_project(root, path, name, out) {
@@ -394,6 +407,7 @@ fn fl_project(root: &Path, folder: &Path, id: &Path, flps: &[&FileEntry], audio:
         modified,
         meta: None,
         arrangement: None,
+        tags: Vec::new(),
     }
 }
 
@@ -470,6 +484,7 @@ fn read_project(root: &Path, dir: &Path, folder_name: &str, out: &mut ScanResult
         modified,
         meta: None,
         arrangement: None,
+        tags: Vec::new(),
     };
 
     if project.named_set().is_none() {
@@ -595,5 +610,31 @@ pub fn order_formats(projects: &mut [Project], prefer_mp3: bool) {
                 if prefer_mp3 { lossless as u8 } else { !lossless as u8 }
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod legacy_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_folders_are_skipped() {
+        let root = std::env::temp_dir().join(format!("librarian-legacy-test-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        for d in ["a Project/Ableton Project Info", "Legacy/old Project/Ableton Project Info", "2023/legacy/x", "2023/b"] {
+            fs::create_dir_all(root.join(d)).unwrap();
+        }
+        fs::write(root.join("a Project/a.als"), b"x").unwrap();
+        fs::write(root.join("Legacy/old Project/old.als"), b"x").unwrap();
+        fs::write(root.join("2023/legacy/x/azimuth.flp"), b"x").unwrap();
+        fs::write(root.join("2023/legacy/x/old.wav"), b"x").unwrap();
+        fs::write(root.join("2023/b/b.flp"), b"x").unwrap();
+
+        let out = scan(&root);
+        let mut names: Vec<&str> = out.projects.iter().map(|p| p.name.as_str()).collect();
+        names.sort();
+        assert_eq!(names, ["a", "b"]);
+        assert!(out.issues.iter().all(|i| !i.path.to_string_lossy().to_lowercase().contains("legacy")));
+        let _ = fs::remove_dir_all(&root);
     }
 }
