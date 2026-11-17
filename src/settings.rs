@@ -423,6 +423,10 @@ impl App {
                 shortcut(t("Skip back / forward 5 seconds"), &["←", "→"]),
                 shortcut(t("Previous / next bounce of the playing project"), &["⇧ ←", "⇧ →"]),
                 shortcut(t("Open the project in its DAW"), &[t("Double-click")]),
+                shortcut(
+                    t("Drag the bounce out as a file"),
+                    &[if cfg!(target_os = "macos") { t("⌥ + drag") } else { t("Alt + drag") }],
+                ),
                 shortcut(t("Open settings"), &[cmd]),
                 shortcut(t("Close a menu or the settings"), &["Esc"]),
             ],

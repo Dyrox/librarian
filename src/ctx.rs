@@ -92,29 +92,39 @@ impl App {
         Some(r.into())
     }
 
-    /// Tag chips floating on a (dark, busy) thumbnail: solid backing.
-    pub(crate) fn tag_chips_on_thumb<'a>(&'a self, pr: &Project) -> Option<Element<'a, Message>> {
+    /// A banner across the top of a grid thumbnail, one band per tag in its
+    /// colour, so a project's state reads at a glance.
+    pub(crate) fn tag_banner<'a>(&'a self, pr: &Project) -> Option<Element<'a, Message>> {
         let key = self.tag_key(pr);
         let names = self.tags.of(&key);
         if names.is_empty() {
             return None;
         }
-        let mut r = row![].spacing(4).align_y(Alignment::Center);
-        for n in names {
-            let color = self.tags.def(n).map(|d| d.color).unwrap_or(0x8A8F98);
+        let last = names.len() - 1;
+        let mut r = row![].width(Length::Fill);
+        for (i, n) in names.iter().enumerate() {
+            let c = style::rgb(self.tags.def(n).map(|d| d.color).unwrap_or(0x8A8F98));
+            // Dark text on light colours (Idea's yellow), white otherwise.
+            let lum = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+            let fg = if lum > 0.6 { style::rgb(0x1A1A1A) } else { Color::WHITE };
+            let radius = iced::border::Radius {
+                top_left: if i == 0 { 8.0 } else { 0.0 },
+                top_right: if i == last { 8.0 } else { 0.0 },
+                bottom_right: 0.0,
+                bottom_left: 0.0,
+            };
             r = r.push(
-                container(
-                    row![dot(color, 6.0), text(tags::label(n)).size(10).font(SEMIBOLD).wrapping(Wrapping::None)]
-                        .spacing(5)
-                        .align_y(Alignment::Center),
-                )
-                .padding([2, 7])
-                .style(|_| iced::widget::container::Style {
-                    background: Some(Color { a: 0.88, ..style::rgb(0x111214) }.into()),
-                    text_color: Some(Color::WHITE),
-                    border: iced::Border { color: Color { a: 0.12, ..Color::WHITE }, width: 1.0, radius: 999.0.into() },
-                    ..Default::default()
-                }),
+                container(text(tags::label(n)).size(11).font(SEMIBOLD).wrapping(Wrapping::None))
+                    .padding([3, 10])
+                    .width(Length::Fill)
+                    .center_x(Length::Fill)
+                    .clip(true)
+                    .style(move |_| iced::widget::container::Style {
+                        background: Some(Color { a: 0.92, ..c }.into()),
+                        text_color: Some(fg),
+                        border: iced::Border { radius, ..Default::default() },
+                        ..Default::default()
+                    }),
             );
         }
         Some(r.into())

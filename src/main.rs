@@ -212,6 +212,10 @@ pub enum Message {
     CreateTag(PathBuf),
     DeleteTag(String),
     Noop,
+    /// Alt/⌥ pressed the left button: get ready to drag the hovered project's bounce out.
+    DragArm,
+    DragMove(iced::Point),
+    DragCancel,
     PollTheme,
     ResetIgnored,
     ThemeChanged(Mode),
@@ -241,6 +245,8 @@ struct App {
     expanded: Option<PathBuf>,
     selected: Option<PathBuf>,
     hovered: Option<PathBuf>,
+    /// The bounce an alt-press picked up, and where; dragging starts once the mouse moves.
+    drag_arm: Option<(PathBuf, iced::Point)>,
     /// Selected bounce version per project (index into `versions`; default 0 = newest).
     version_sel: HashMap<PathBuf, usize>,
     audio: Audio,
@@ -309,6 +315,7 @@ impl App {
             expanded: None,
             selected: None,
             hovered: None,
+            drag_arm: None,
             version_sel: HashMap::new(),
             audio,
             now: None,
@@ -656,6 +663,26 @@ impl App {
                 self.selected = Some(dir);
                 Task::none()
             }
+            Message::DragArm => {
+                self.drag_arm = self
+                    .hovered
+                    .as_ref()
+                    .and_then(|dir| self.project(dir))
+                    .and_then(|p| self.current_demo(p))
+                    .map(|d| (d.path.clone(), cursor()));
+                Task::none()
+            }
+            Message::DragMove(at) => match &self.drag_arm {
+                Some((_, from)) if at.distance(*from) > 4.0 => {
+                    let (file, _) = self.drag_arm.take().unwrap();
+                    drag_out(file)
+                }
+                _ => Task::none(),
+            },
+            Message::DragCancel => {
+                self.drag_arm = None;
+                Task::none()
+            }
             Message::Hover(dir) => {
                 self.hovered = dir;
                 Task::none()
@@ -892,6 +919,15 @@ impl App {
                 set_cursor(position);
                 None
             }
+            (Event::Keyboard(keyboard::Event::ModifiersChanged(m)), _) => {
+                ALT.store(m.alt(), std::sync::atomic::Ordering::Relaxed);
+                None
+            }
+            (Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Left)), _)
+                if ALT.load(std::sync::atomic::Ordering::Relaxed) =>
+            {
+                Some(Message::DragArm)
+            }
             (Event::Mouse(iced::mouse::Event::ButtonPressed(iced::mouse::Button::Right)), event::Status::Ignored) => {
                 Some(Message::DismissMenu)
             }
@@ -954,7 +990,17 @@ impl App {
         } else {
             Subscription::none()
         };
-        let events = Subscription::batch([events, watcher, wheel]);
+        // Only between an alt-press and the drag starting.
+        let drag = if self.drag_arm.is_some() {
+            event::listen_with(|event, _, _| match event {
+                Event::Mouse(iced::mouse::Event::CursorMoved { position }) => Some(Message::DragMove(position)),
+                Event::Mouse(iced::mouse::Event::ButtonReleased(_)) => Some(Message::DragCancel),
+                _ => None,
+            })
+        } else {
+            Subscription::none()
+        };
+        let events = Subscription::batch([events, watcher, wheel, drag]);
         if self.audio.is_playing() {
             Subscription::batch([
                 events,
@@ -1464,6 +1510,9 @@ impl App {
                 .on_press(Message::ToggleExpand(pr.dir.clone())),
         )
         .on_right_press(Message::ContextMenu(pr.dir.clone()))
+        // Tracked for alt-dragging the bounce out.
+        .on_enter(Message::Hover(Some(pr.dir.clone())))
+        .on_exit(Message::Hover(None))
         .into()
     }
 
@@ -1620,8 +1669,8 @@ impl App {
             self.thumb(pr).width(Length::Fill).height(thumb_h),
             container(overlay).padding(10).width(Length::Fill).height(thumb_h).align_y(Alignment::End),
         ];
-        if let Some(chips) = self.tag_chips_on_thumb(pr) {
-            top = top.push(container(chips).padding(8).width(Length::Fill).clip(true));
+        if let Some(banner) = self.tag_banner(pr) {
+            top = top.push(banner);
         }
 
         let bpm = pr.meta.as_ref().and_then(|m| m.tempo).map(|t| format!("{} BPM", fmt_bpm(t))).unwrap_or_default();
@@ -2099,6 +2148,34 @@ fn thumb_height(tile_w: f32) -> f32 {
 /// Height of a grid tile: padding, thumbnail, gap, info.
 fn tile_height(tile_w: f32) -> f32 {
     6.0 + thumb_height(tile_w) + 4.0 + INFO_H + 6.0
+}
+
+/// Whether Alt/⌥ is held, kept up to date without a message per change.
+static ALT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Starts a system drag of `file` (a bounce) out of the window, so it can be
+/// dropped into Finder/Explorer, a DAW, a chat app…
+fn drag_out(file: PathBuf) -> Task<Message> {
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    {
+        window::latest().then(move |id| {
+            let Some(id) = id else { return Task::none() };
+            let file = file.clone();
+            window::run(id, move |w| {
+                let Ok(handle) = w.window_handle() else { return };
+                let icon = drag::Image::Raw(include_bytes!("../assets/drag.png").to_vec());
+                if let Err(e) = drag::start_drag(&handle, drag::DragItem::Files(vec![file]), icon, |_, _| {}, Default::default()) {
+                    eprintln!("librarian: drag failed: {e}");
+                }
+            })
+            .discard()
+        })
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        let _ = file;
+        Task::none()
+    }
 }
 
 static CURSOR: std::sync::Mutex<iced::Point> = std::sync::Mutex::new(iced::Point::ORIGIN);
