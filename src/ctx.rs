@@ -92,8 +92,8 @@ impl App {
         Some(r.into())
     }
 
-    /// A banner across the top of a grid thumbnail, one band per tag in its
-    /// colour, so a project's state reads at a glance.
+    /// A corner tab on a grid thumbnail, one segment per tag in its colour,
+    /// so a project's state reads at a glance.
     pub(crate) fn tag_banner<'a>(&'a self, pr: &Project) -> Option<Element<'a, Message>> {
         let key = self.tag_key(pr);
         let names = self.tags.of(&key);
@@ -101,7 +101,8 @@ impl App {
             return None;
         }
         let last = names.len() - 1;
-        let mut r = row![].width(Length::Fill);
+        // A tab tucked into the thumbnail's top-left corner, one segment per tag.
+        let mut r = row![];
         for (i, n) in names.iter().enumerate() {
             let c = style::rgb(self.tags.def(n).map(|d| d.color).unwrap_or(0x8A8F98));
             // Dark text on light colours (Idea's yellow), white otherwise.
@@ -109,18 +110,15 @@ impl App {
             let fg = if lum > 0.6 { style::rgb(0x1A1A1A) } else { Color::WHITE };
             let radius = iced::border::Radius {
                 top_left: if i == 0 { 8.0 } else { 0.0 },
-                top_right: if i == last { 8.0 } else { 0.0 },
-                bottom_right: 0.0,
+                top_right: 0.0,
+                bottom_right: if i == last { 8.0 } else { 0.0 },
                 bottom_left: 0.0,
             };
             r = r.push(
                 container(text(tags::label(n)).size(11).font(SEMIBOLD).wrapping(Wrapping::None))
                     .padding([3, 10])
-                    .width(Length::Fill)
-                    .center_x(Length::Fill)
-                    .clip(true)
                     .style(move |_| iced::widget::container::Style {
-                        background: Some(Color { a: 0.92, ..c }.into()),
+                        background: Some(c.into()),
                         text_color: Some(fg),
                         border: iced::Border { radius, ..Default::default() },
                         ..Default::default()
