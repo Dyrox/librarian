@@ -133,6 +133,8 @@ pub struct Prefs {
     pub prefer_mp3: bool,
     pub watch: bool,
     pub new_marks: bool,
+    /// Look for a newer release on GitHub at startup.
+    pub check_updates: bool,
 }
 
 impl Default for Prefs {
@@ -151,6 +153,7 @@ impl Default for Prefs {
             prefer_mp3: false,
             watch: true,
             new_marks: true,
+            check_updates: true,
         }
     }
 }
@@ -229,6 +232,7 @@ pub fn load_prefs() -> Prefs {
                 "prefer" => prefs.prefer_mp3 = v == "mp3",
                 "watch" => prefs.watch = v != "0",
                 "new_marks" => prefs.new_marks = v != "0",
+                "check_updates" => prefs.check_updates = v != "0",
                 "window" => {
                     prefs.window = v.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)))
                 }
@@ -267,6 +271,7 @@ pub fn save_prefs(prefs: &Prefs) {
     out += &format!("prefer={}\n", if prefs.prefer_mp3 { "mp3" } else { "wav" });
     out += &format!("watch={}\n", prefs.watch as u8);
     out += &format!("new_marks={}\n", prefs.new_marks as u8);
+    out += &format!("check_updates={}\n", prefs.check_updates as u8);
     for key in &prefs.ignored {
         out += &format!("ignore={key}\n");
     }

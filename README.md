@@ -59,6 +59,9 @@ Each project's tags are saved inside it, in a hidden `.librarian-tags` file, so 
 project is moved, renamed or copied to another computer (loose `.flp` files sharing a folder get a line
 each in that folder's file). Tags from older versions are moved there on the first scan.
 
+At startup Librarian asks GitHub for the newest release and, if there is one, shows a download link in the
+sidebar and in Settings → About (turn it off there; nothing about you or your library is sent).
+
 Preferences, custom tag names and listening history live in `~/Library/Application Support/Librarian`, caches in
 `~/Library/Caches/Librarian`.
 

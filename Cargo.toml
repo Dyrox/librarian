@@ -16,6 +16,7 @@ rodio = "0.23"
 symphonia = { version = "0.5", features = ["mp3", "wav", "pcm", "flac"] }
 sys-locale = "0.3"
 unicode-normalization = "0.1.26"
+ureq = "3"
 
 [profile.release]
 # Thin LTO keeps most of the size/speed win but builds in parallel, so CI is much faster.

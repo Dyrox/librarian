@@ -16,6 +16,7 @@ mod peaks;
 mod scan;
 mod style;
 mod tags;
+mod update;
 mod thumb;
 mod waveform;
 mod watch;
@@ -270,6 +271,7 @@ struct App {
     /// screen are built (see `grid`).
     grid_offset: f32,
     grid_height: f32,
+    update: update::State,
 }
 
 /// Runs blocking work on the rayon pool and resolves when it's done.
@@ -335,6 +337,7 @@ impl App {
             window_size: Size::ZERO,
             grid_offset: 0.0,
             grid_height: 1200.0,
+            update: update::State::Idle,
         };
         app.apply_theme();
         let scan = app.rescan();
@@ -348,7 +351,8 @@ impl App {
             }),
             None => Task::none(),
         };
-        (app, Task::batch([theme, scan, icon, settings, scroll]))
+        let updates = if app.prefs.check_updates { app.update_settings(settings::Set::CheckUpdates) } else { Task::none() };
+        (app, Task::batch([theme, scan, icon, settings, scroll, updates]))
     }
 
     fn root(&self) -> Option<&Path> {
@@ -1162,6 +1166,7 @@ impl App {
                 .height(Length::Fill)
                 .direction(Direction::Vertical(Scrollbar::new().width(4).scroller_width(4)))
                 .style(scroll),
+            self.update_card(),
             container(Space::new().height(1)).style(divider).width(Length::Fill),
             Space::new().height(6),
             row![

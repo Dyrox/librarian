@@ -13,7 +13,7 @@ use crate::apps::{self, Daw};
 use crate::i18n::{self, Lang, t};
 use crate::icons::{self, icon};
 use crate::style::{self, *};
-use crate::{App, Filter, Message, audio, blocking, cache, fmt_size, reveal_path, scan};
+use crate::{App, Filter, Message, audio, blocking, cache, fmt_size, reveal_path, scan, update};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThemePref {
@@ -76,6 +76,9 @@ pub enum Set {
     RevealSettings,
     RevealRoot,
     OpenUrl(&'static str),
+    CheckUpdates,
+    UpdateChecked(Result<String, String>),
+    AutoUpdates(bool),
 }
 
 const AUTHOR_URL: &str = "https://github.com/Dyrox";
@@ -208,6 +211,26 @@ impl App {
             }
             Set::OpenUrl(url) => {
                 apps::open_with(None, Path::new(url));
+                Task::none()
+            }
+            Set::CheckUpdates => {
+                if self.update == update::State::Checking {
+                    return Task::none();
+                }
+                self.update = update::State::Checking;
+                Task::perform(blocking(update::latest), |r| msg(Set::UpdateChecked(r)))
+            }
+            Set::UpdateChecked(r) => {
+                self.update = match r {
+                    Ok(v) if update::is_newer(&v, update::current()) => update::State::Available(v),
+                    Ok(_) => update::State::UpToDate,
+                    Err(_) => update::State::Failed,
+                };
+                Task::none()
+            }
+            Set::AutoUpdates(on) => {
+                self.prefs.check_updates = on;
+                self.save_prefs();
                 Task::none()
             }
             Set::RevealRoot => {
@@ -451,6 +474,13 @@ impl App {
                     Some(format!("{version}  ·  {}", t("A project browser for Ableton Live and FL Studio."))),
                     small_button(t("Source code"), msg(Set::OpenUrl(REPO_URL))),
                 ),
+                self.update_item(),
+                item(
+                    None,
+                    t("Check for updates at startup"),
+                    Some(t("Asks GitHub for the newest release. Nothing about you or your library is sent.").into()),
+                    switch_ctl(self.prefs.check_updates, Set::AutoUpdates),
+                ),
                 item(
                     Some(avatar.into()),
                     t("Made by Dyrox"),
@@ -473,6 +503,47 @@ impl App {
             .direction(Direction::Vertical(Scrollbar::new().width(6).scroller_width(6).margin(3)))
             .style(scroll),
         ]
+        .into()
+    }
+
+    fn update_item(&self) -> Element<'_, Message> {
+        let p = p();
+        let zh = i18n::zh();
+        let desc = match &self.update {
+            update::State::Idle => t("Not checked yet").to_string(),
+            update::State::Checking => t("Checking…").to_string(),
+            update::State::UpToDate => t("You're on the newest version").to_string(),
+            update::State::Available(v) => {
+                if zh { format!("新版本 {v} 可以下载了（当前 {}）", update::current()) } else { format!("Version {v} is out (you have {})", update::current()) }
+            }
+            update::State::Failed => t("Couldn't reach GitHub. Check your connection and try again.").to_string(),
+        };
+        let ctl: Element<_> = match &self.update {
+            update::State::Available(_) => button(text(t("Download")).size(12).font(MEDIUM))
+                .padding([6, 12])
+                .style(primary)
+                .on_press(msg(Set::OpenUrl(update::RELEASES)))
+                .into(),
+            update::State::Checking => text(t("Checking…")).size(12).color(p.text_2).into(),
+            _ => small_button(t("Check now"), msg(Set::CheckUpdates)),
+        };
+        item(None, t("Updates"), Some(desc), ctl)
+    }
+
+    /// The sidebar notice when a newer release is out.
+    pub(crate) fn update_card(&self) -> Element<'_, Message> {
+        let update::State::Available(v) = &self.update else {
+            return Space::new().into();
+        };
+        let label = if i18n::zh() { format!("新版本 {v} · 下载") } else { format!("Version {v} is out · Download") };
+        container(
+            button(text(label).size(12).font(MEDIUM).wrapping(Wrapping::None).width(Length::Fill).center())
+                .width(Length::Fill)
+                .padding([7, 12])
+                .style(primary)
+                .on_press(msg(Set::OpenUrl(update::RELEASES))),
+        )
+        .padding(iced::Padding { top: 6.0, right: 0.0, bottom: 8.0, left: 0.0 })
         .into()
     }
 
