@@ -18,8 +18,8 @@ sys-locale = "0.3"
 unicode-normalization = "0.1.26"
 
 [profile.release]
-lto = true
-codegen-units = 1
+# Thin LTO keeps most of the size/speed win but builds in parallel, so CI is much faster.
+lto = "thin"
 panic = "abort"
 strip = true
 opt-level = 3

@@ -12,8 +12,8 @@ export MACOSX_DEPLOYMENT_TARGET=11.0
 
 if [ "$UNIVERSAL" = 1 ]; then
   rustup target add aarch64-apple-darwin x86_64-apple-darwin >/dev/null
-  cargo build --release --target aarch64-apple-darwin
-  cargo build --release --target x86_64-apple-darwin
+  # One cargo run builds both architectures side by side.
+  cargo build --release --target aarch64-apple-darwin --target x86_64-apple-darwin
   mkdir -p target/universal
   lipo -create -output target/universal/librarian \
     target/aarch64-apple-darwin/release/librarian \
